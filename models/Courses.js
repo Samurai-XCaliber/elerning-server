@@ -1,6 +1,6 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
-const Schema = new mongoose.Schema({
+const schema = new mongoose.Schema({
     title:{
         type: String,
         required: true,
@@ -36,4 +36,5 @@ const Schema = new mongoose.Schema({
     },
 });
 
-export const Courses = mongoose.model("Courses", Schema);
+export const Courses = mongoose.model("Courses", schema);
+

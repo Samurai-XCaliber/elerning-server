@@ -60,7 +60,7 @@ export const deleteLecture = TryCatch(async (req, res) => {
 
     await lecture.deleteOne();
 
-    res.json({message: "Lecture Deleted",});
+    res.json({message: "Lecture Deleted" });
 });
 
 const unlinkAsync = promisify(fs.unlink);
@@ -109,13 +109,19 @@ export const getAllStats = TryCatch(async (req, res) => {
 });
 
 export const getAllUser = TryCatch(async(req,res)=>{
-    const users = await User.find({_id:{$ne: req.user._id}}).select("-password");
+    const users = await User.find({_id:{$ne: req.user._id}}).select(
+        "-password"
+    );
 
     res.json({ users });
 });
 
-export const updateRole = TryCatch(async(req,res)=>{
-    const user = await User.findById(req.params.id)
+export const updateRole = TryCatch(async (req, res) => {
+    if(req.user.mainrole !== "superadmin") 
+        return res.status(403).json({
+        message: "this endpoint is assign to superadmin",
+    });
+    const user = await User.findById(req.params.id);
 
     if(user.role === "user"){
         user.role = "admin";
@@ -127,6 +133,14 @@ export const updateRole = TryCatch(async(req,res)=>{
     }
 
     if(user.role === "admin"){
+        user.role = "lect";
+        await user.save();
+
+        return res.status(200).json({
+            message: "Role updated",
+        });
+    }
+    if(user.role === "lect"){
         user.role = "user";
         await user.save();
 

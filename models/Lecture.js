@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const schema = new mongoose.Schema({
     title: {
@@ -24,4 +24,4 @@ const schema = new mongoose.Schema({
     },
 });
 
-export const Lecture = mongoose.model('Lecture', schema);
+export const Lecture = mongoose.model("Lecture", schema);

@@ -1,4 +1,4 @@
-import express from 'express';
+import express from "express";
 import { 
     getAllCourses, 
     getSingleCourse, 
@@ -7,8 +7,8 @@ import {
     getMyCourses,
     checkout,
     paymentVerification,
-} from '../controllers/course.js';
-import { isAuth } from '../middlewares/isAuth.js';
+} from "../controllers/course.js";
+import { isAuth } from "../middlewares/isAuth.js";
 
 const router = express.Router();
 
