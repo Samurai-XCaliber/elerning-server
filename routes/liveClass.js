@@ -1,5 +1,5 @@
 import express from "express"
-import { isAuth, isAdmin,} from "../middlewares/isAuth.js"
+import { isAuth, isAdmin } from "../middlewares/isAuth.js"
 import {
   createLiveClass,
   getAllLiveClasses,
@@ -13,7 +13,8 @@ import {
   validateLecturerAccess,
   getLecturerClasses,
   getAllLecturers,
-  getMyLiveClasses
+  getMyLiveClasses,
+  checkLiveClassAvailability,
 } from "../controllers/liveClass.js"
 import { uploadFiles } from "../middlewares/multer.js"
 
@@ -42,4 +43,8 @@ router.post("/live-class/:id/start-meeting", isAuth, startMeeting)
 router.get("/live-class/validate-time/:id", isAuth, validateLiveClassTime)
 router.get("/my-live-classes", isAuth, getMyLiveClasses)
 
-export default router;
+// New route for checking availability
+router.get("/live-class/check-availability/:id", isAuth, checkLiveClassAvailability)
+
+export default router
+
