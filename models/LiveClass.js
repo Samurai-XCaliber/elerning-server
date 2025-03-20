@@ -50,11 +50,16 @@ const liveClassSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  firstPurchaser: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    default: null,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
   },
 })
 
-export const LiveClass = mongoose.model("LiveClass", liveClassSchema);
+export const LiveClass = mongoose.model("LiveClass", liveClassSchema)
 
