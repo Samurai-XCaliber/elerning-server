@@ -1,7 +1,7 @@
 import TryCatch from "../middlewares/TryCatch.js"
-import { LiveClass } from "../models/LiveClass.js"
-import { User } from "../models/User.js"
 import { Payment } from "../models/Payment.js"
+import { User } from "../models/User.js"
+import { LiveClass } from "../models/LiveClass.js"
 import crypto from "crypto"
 import { instance } from "../index.js" // Ensure this is your Razorpay instance
 import fs from "fs"
@@ -32,6 +32,7 @@ export const createLiveClass = TryCatch(async (req, res) => {
     endDateTime,
     lectureUsername,
     image: image?.path,
+    firstPurchaser: null, // Add this field to track the first purchaser
   })
 
   res.status(201).json({
@@ -42,37 +43,59 @@ export const createLiveClass = TryCatch(async (req, res) => {
 
 // Fetch all live classes
 export const getAllLiveClasses = TryCatch(async (req, res) => {
-  const user = await User.findById(req.user._id);
-  const currentTime = new Date();
+  const user = await User.findById(req.user._id)
+  const currentTime = new Date()
 
-  let liveClasses = await LiveClass.find();
+  let liveClasses = await LiveClass.find()
 
   // Filter out expired live classes for regular users and lecturers
   if (user.role === "user" || user.role === "lect") {
     liveClasses = liveClasses.filter((liveClass) => {
-      const endTime = new Date(liveClass.endDateTime);
-      return endTime > currentTime; // Only include live classes that haven't ended
-    });
+      const endTime = new Date(liveClass.endDateTime)
+      return endTime > currentTime // Only include live classes that haven't ended
+    })
   }
 
   // If the user is a lecturer, filter live classes assigned to them
   if (user.role === "lect") {
-    liveClasses = liveClasses.filter((liveClass) => liveClass.lectureUsername === user.email);
+    liveClasses = liveClasses.filter((liveClass) => liveClass.lectureUsername === user.email)
   }
 
-  // Add purchased status for each live class
-  const liveClassesWithStatus = liveClasses.map((liveClass) => ({
-    ...liveClass.toObject(),
-    purchased: user.subscription.includes(liveClass._id),
-  }));
+  // Check if each live class has been purchased by any user
+  const liveClassesWithStatus = await Promise.all(
+    liveClasses.map(async (liveClass) => {
+      // Find all users who have purchased this live class
+      const purchasers = await User.find({ subscription: liveClass._id })
 
-  res.json({ liveClasses: liveClassesWithStatus });
-});
+      return {
+        ...liveClass.toObject(),
+        purchased: user.subscription.includes(liveClass._id),
+        purchasedByAnyUser: purchasers.length > 0,
+        // If you want to store the first purchaser's info
+        firstPurchaser: liveClass.firstPurchaser || (purchasers.length > 0 ? purchasers[0]._id : null),
+      }
+    }),
+  )
+
+  res.json({ liveClasses: liveClassesWithStatus })
+})
 
 // Fetch a single live class by ID
 export const getLiveClassById = TryCatch(async (req, res) => {
   const liveClass = await LiveClass.findById(req.params.id)
-  res.json({ liveClass })
+
+  // Check if the class has been purchased by any user
+  const purchasers = await User.find({ subscription: liveClass._id })
+  const hasBeenPurchased = purchasers.length > 0
+
+  // Add the purchased status to the response
+  const liveClassWithStatus = {
+    ...liveClass.toObject(),
+    hasBeenPurchased,
+    firstPurchaser: liveClass.firstPurchaser,
+  }
+
+  res.json({ liveClass: liveClassWithStatus })
 })
 
 // Delete a live class (for admin/superadmin)
@@ -111,6 +134,14 @@ export const checkoutLiveClass = TryCatch(async (req, res) => {
     })
   }
 
+  // Check if the class has already been purchased by someone else
+  const purchasers = await User.find({ subscription: liveClass._id })
+  if (purchasers.length > 0 && !purchasers.some((p) => p._id.toString() === user._id.toString())) {
+    return res.status(400).json({
+      message: "This live class is no longer available for purchase.",
+    })
+  }
+
   const options = {
     amount: Number(liveClass.price * 100), // Convert to paise
     currency: "INR",
@@ -143,6 +174,24 @@ export const paymentVerificationLiveClass = TryCatch(async (req, res) => {
 
     const user = await User.findById(req.user._id)
     const liveClass = await LiveClass.findById(req.params.id)
+
+    // Check if this live class already has a purchaser
+    const existingPurchasers = await User.find({ subscription: liveClass._id })
+
+    if (existingPurchasers.length > 0) {
+      // If someone else already purchased
+      if (!existingPurchasers.some((p) => p._id.toString() === user._id.toString())) {
+        return res.status(400).json({
+          message: "This live class is no longer available for purchase.",
+        })
+      }
+    }
+
+    // If no one has purchased yet, set this user as the first purchaser
+    if (!liveClass.firstPurchaser) {
+      liveClass.firstPurchaser = user._id
+      await liveClass.save()
+    }
 
     user.subscription.push(liveClass._id)
     await user.save()
@@ -267,15 +316,39 @@ export const getAllLecturers = TryCatch(async (req, res) => {
   const lecturers = await User.find({ role: "lect" }).select("_id name email")
 
   res.status(200).json({ lecturers })
-});
+})
 
 export const getMyLiveClasses = TryCatch(async (req, res) => {
-  const user = await User.findById(req.user._id);
+  const user = await User.findById(req.user._id)
 
   // Fetch live classes that the user has purchased or is assigned to
   const liveClasses = await LiveClass.find({
     _id: { $in: user.subscription }, // Assuming `subscription` contains live class IDs
-  });
+  })
 
-  res.status(200).json({ liveClasses });
-});
+  res.status(200).json({ liveClasses })
+})
+
+// New endpoint to check if a live class is available for purchase
+export const checkLiveClassAvailability = TryCatch(async (req, res) => {
+  const liveClass = await LiveClass.findById(req.params.id)
+
+  if (!liveClass) {
+    return res.status(404).json({ message: "Live class not found" })
+  }
+
+  // Check if the current user has already purchased this class
+  const currentUser = await User.findById(req.user._id)
+  if (currentUser.subscription.includes(liveClass._id)) {
+    return res.status(200).json({ isAvailable: true })
+  }
+
+  // Check if any user has purchased this class
+  const purchasers = await User.find({ subscription: liveClass._id })
+
+  // If there are purchasers and the current user is not one of them, it's not available
+  const isAvailable = purchasers.length === 0
+
+  res.status(200).json({ isAvailable })
+})
+
