@@ -155,24 +155,33 @@ export const addProgress = TryCatch ( async (req, res) => {
     });
 });
 
-export const getYourProgress = TryCatch ( async (req, res) => {
+export const getYourProgress = TryCatch(async (req, res) => {
     const progress = await Progress.find({
-        user: req.user._id,
-        course: req.query.course,
-    });
-
-    if (!progress) return res.status(404).json({ message: "null" });
-
-    const allLectures = (await Lecture.find({ course: req.query.course })).length;
-
-    const completedLectures = progress[0].completedLectures.length;
-
-    const courseProgressPercentage = (completedLectures * 100) / allLectures;
-
+      user: req.user._id,
+      course: req.query.course,
+    })
+  
+    // The issue is here - we need to handle the case when no progress exists yet
+    if (!progress || progress.length === 0) {
+      // Return an empty progress object instead of a 404 error
+      return res.json({
+        courseProgressPercentage: 0,
+        completedLectures: 0,
+        allLectures: 0,
+        progress: [],
+      })
+    }
+  
+    const allLectures = (await Lecture.find({ course: req.query.course })).length
+  
+    const completedLectures = progress[0].completedLectures.length
+  
+    const courseProgressPercentage = (completedLectures * 100) / allLectures
+  
     res.json({
-        courseProgressPercentage,
-        completedLectures,
-        allLectures,
-        progress,
-    });
-});
+      courseProgressPercentage,
+      completedLectures,
+      allLectures,
+      progress,
+    })
+  })
